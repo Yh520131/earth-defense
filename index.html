@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>地球保卫战 · 战役地图（原型）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #05070d;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f0e8;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  #map {
+    display: block;
+    width: 100vw; height: 100vh;
+    cursor: grab;
+    touch-action: none;
+  }
+  #map.dragging { cursor: grabbing; }
+  #map.pointing { cursor: pointer; }
+
+  /* ===== 左上：标题与进度 ===== */
+  #hud {
+    position: fixed;
+    top: 16px; left: 18px;
+    z-index: 20;
+    pointer-events: none;
+  }
+  #hud .title {
+    font-family: "STKaiti", "KaiTi", "Songti SC", "Microsoft YaHei", serif;
+    font-size: 34px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    color: #ffe9a8;
+    text-shadow: 0 2px 0 rgba(0,0,0,.6), 0 0 22px rgba(255,196,60,.35);
+    line-height: 1.1;
+  }
+  #hud .subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: rgba(210,230,210,.55);
+  }
+  #hud .progress {
+    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(8,18,14,.62);
+    border: 1px solid rgba(255,212,59,.18);
+    font-size: 13px;
+    color: #cfe3cf;
+    backdrop-filter: blur(6px);
+  }
+  #hud .progress b { color: #ffd43b; font-weight: bold; }
+  #hud .progress .dot { width: 3px; height: 3px; border-radius: 50%; background: rgba(255,255,255,.25); }
+
+  /* ===== 右上：演示控制 ===== */
+  #demo {
+    position: fixed;
+    top: 16px; right: 16px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  #demo .lbl {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(200,220,200,.45);
+    margin-bottom: 2px;
+  }
+  .mini-btn {
+    min-width: 118px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #cfe3cf;
+    background: rgba(8,18,14,.72);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .16s;
+    text-align: center;
+  }
+  .mini-btn:hover {
+    background: rgba(24,48,32,.9);
+    border-color: rgba(255,212,59,.4);
+    color: #ffe9a8;
+    transform: translateY(-1px);
+  }
+  .mini-btn:active { transform: translateY(0) scale(.98); }
+
+  /* ===== 右下：缩放 ===== */
+  #zoomers {
+    position: fixed;
+    right: 18px; bottom: 22px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .zbtn {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(8,18,14,.78);
+    color: #dfeedd;
+    font-size: 18px;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(6px);
+    transition: all .16s;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45);
+  }
+  .zbtn:hover { background: rgba(30,60,40,.92); border-color: rgba(255,212,59,.45); color: #ffe9a8; transform: scale(1.06); }
+  .zbtn:active { transform: scale(.94); }
+
+  /* ===== 底部提示 ===== */
+  #tips {
+    position: fixed;
+    left: 50%; bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 20;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: rgba(210,230,210,.42);
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: rgba(5,10,8,.5);
+    border: 1px solid rgba(255,255,255,.06);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* ===== 悬停提示 ===== */
+  #tip {
+    position: fixed;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .12s, transform .12s;
+    background: rgba(6,14,11,.94);
+    border: 1px solid rgba(255,212,59,.28);
+    border-radius: 10px;
+    padding: 9px 13px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.6);
+    max-width: 240px;
+  }
+  #tip.show { opacity: 1; transform: translateY(0); }
+  #tip .t-name { font-size: 14px; font-weight: bold; color: #f2f7ef; display: flex; align-items: center; gap: 6px; }
+  #tip .t-name .no { color: #ffd43b; font-size: 12px; }
+  #tip .t-region { margin-top: 2px; font-size: 11px; color: rgba(190,215,190,.6); letter-spacing: 1px; }
+  #tip .t-state { margin-top: 5px; font-size: 11px; color: #9fd7a8; }
+  #tip .t-state.lock { color: #8b96a0; }
+  #tip .t-state.done { color: #ffd43b; }
+
+  /* ===== 关卡卡片 ===== */
+  #shade {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: radial-gradient(60% 60% at 50% 45%, rgba(0,0,0,.25), rgba(0,0,0,.72));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .22s;
+  }
+  #shade.show { opacity: 1; pointer-events: auto; }
+
+  #card {
+    position: fixed;
+    left: 50%; top: 50%;
+    z-index: 60;
+    width: min(420px, calc(100vw - 40px));
+    transform: translate(-50%, -46%) scale(.94);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .26s cubic-bezier(.2,1.2,.35,1), opacity .22s;
+  }
+  #card.show {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .card-inner {
+    position: relative;
+    background: linear-gradient(160deg, rgba(14,30,22,.98), rgba(7,16,12,.98));
+    border: 1px solid rgba(255,212,59,.30);
+    border-radius: 18px;
+    padding: 22px 22px 18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .card-inner::before {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    border-radius: 13px;
+    border: 1px solid rgba(255,212,59,.10);
+    pointer-events: none;
+  }
+  .c-region {
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: rgba(255,212,59,.75);
+    margin-bottom: 14px;
+  }
+  .c-head { display: flex; align-items: center; gap: 14px; }
+  .c-emoji {
+    width: 62px; height: 62px;
+    flex: none;
+    border-radius: 14px;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.12), rgba(255,255,255,.02));
+    border: 1px solid rgba(255,212,59,.22);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    line-height: 1;
+    box-shadow: inset 0 0 22px rgba(255,196,60,.10);
+  }
+  .c-name { font-size: 22px; font-weight: bold; color: #f4f9f0; letter-spacing: 1px; }
+  .c-no { margin-top: 4px; font-size: 12px; color: rgba(190,215,190,.55); letter-spacing: 2px; }
+  .c-desc {
+    margin-top: 16px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: rgba(210,228,208,.82);
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.06);
+  }
+  .c-boss {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #ff9b9b;
+    display: none;
+  }
+  .c-boss.show { display: block; }
+  .c-stars {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 20px;
+    letter-spacing: 3px;
+    color: #ffd43b;
+  }
+  .c-stars .empty { color: rgba(255,255,255,.14); }
+  .c-stars .txt { font-size: 11px; letter-spacing: 1px; color: rgba(200,220,200,.5); margin-left: 4px; }
+  .c-path {
+    margin-top: 12px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: rgba(170,190,170,.42);
+    font-family: Consolas, monospace;
+  }  .c-btns { margin-top: 20px; display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    padding: 11px 0;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all .16s;
+    letter-spacing: 2px;
+  }
+  .btn.ghost {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(220,235,220,.8);
+  }
+  .btn.ghost:hover { background: rgba(255,255,255,.09); color: #fff; }
+  .btn.primary {
+    background: linear-gradient(135deg, #57b45f, #2f7a38);
+    border: 1px solid rgba(120,255,140,.30);
+    color: #fff;
+    font-weight: bold;
+    box-shadow: 0 6px 20px rgba(60,180,90,.30);
+  }
+  .btn.primary:hover { transform: translateY(-1px); box-shadow: 0 9px 26px rgba(60,200,100,.42); }
+  .btn.primary:active { transform: translateY(0) scale(.99); }
+
+  /* ===== Toast ===== */
+  #toast {
+    position: fixed;
+    left: 50%; bottom: 84px;
+    transform: translate(-50%, 8px);
+    z-index: 70;
+    padding: 11px 22px;
+    border-radius: 12px;
+    background: rgba(8,18,14,.95);
+    border: 1px solid rgba(255,212,59,.28);
+    color: #f0f6ec;
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    box-shadow: 0 12px 34px rgba(0,0,0,.6);
+    max-width: min(80vw, 460px);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ===== 错误提示条（调试用，出错时才会出现）===== */
+  #errBar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 400;
+    display: none;
+    padding: 10px 16px;
+    background: rgba(120, 20, 20, 0.95);
+    color: #ffd7d7;
+    font: 12px/1.6 Consolas, "Courier New", monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border-top: 1px solid rgba(255,120,120,.5);
+  }
+
+  /* ===== 关卡 iframe ===== */
+  #frameWrap {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+    background: #05070d;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .22s ease;
+  }
+  #frameWrap.show { opacity: 1; pointer-events: auto; }
+  #levelFrame {
+    width: 100%; height: 100%;
+    border: 0;
+    display: block;
+    background: #05070d;
+  }
+  #frameTip {
+    position: absolute;
+    left: 50%; bottom: 26px;
+    transform: translateX(-50%);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: rgba(220,235,220,.45);
+    background: rgba(5,10,8,.55);
+    padding: 6px 14px;
+    border-radius: 999px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  #frameTip.show { opacity: 1; }
+
+  /* ===== 找不到关卡文件 ===== */
+  #fileErr {
+    position: fixed; inset: 0; z-index: 500;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(3,6,10,.78);
+  }
+  #fileErr.show { display: flex; }
+  .fe-card {
+    width: min(470px, 90vw);
+    background: linear-gradient(160deg, rgba(34,16,16,.98), rgba(14,8,8,.98));
+    border: 1px solid rgba(255,120,120,.45);
+    border-radius: 16px;
+    padding: 24px 22px 16px;
+    color: #f0dcdc;
+    box-shadow: 0 24px 70px rgba(0,0,0,.78);
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .fe-title { font-size: 19px; font-weight: bold; color: #ff9b9b; margin-bottom: 10px; letter-spacing: 2px; }
+  .fe-card p { margin: 8px 0; color: #d8c8c8; }
+  .fe-card code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  .fe-zip {
+    background: rgba(255, 170, 60, .12);
+    border: 1px solid rgba(255, 190, 90, .45);
+    border-radius: 8px;
+    padding: 10px 12px !important;
+    color: #ffd9a0 !important;
+    font-weight: bold;
+  }
+  .fe-url { font-size: 11px !important; color: #9a8a8a !important; word-break: break-all; }
+  .fe-url span { color: #ffd0a0; }
+  .fe-ver { font-size: 10px; color: #6a5a5a; letter-spacing: 1px; margin-top: 8px; text-align: center; }
+  #feClose {
+    margin-top: 14px; width: 100%; padding: 10px 0; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06);
+    color: #f0dcdc; font-family: inherit; font-size: 13px; cursor: pointer;
+  }
+  #feClose:hover { background: rgba(255,255,255,.12); }
+
+  @media (max-width: 720px) {
+    #hud .title { font-size: 24px; letter-spacing: 2px; }
+    #hud .subtitle { font-size: 10px; letter-spacing: 3px; }
+    #hud .progress { font-size: 11px; padding: 5px 10px; }
+    #demo { top: 12px; right: 10px; gap: 6px; }
+    .mini-btn { min-width: 92px; font-size: 11px; padding: 6px 9px; }
+    .zbtn { width: 38px; height: 38px; font-size: 16px; }
+    #tips { font-size: 10px; letter-spacing: 1px; bottom: 14px; padding: 6px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="map"></canvas>
+
+<div id="hud">
+  <div class="title">地球保卫战</div>
+  <div class="subtitle">战 役 地 图 · 三 幕 十 三 关</div>
+  <div class="progress">
+    <span>已通关 <b id="pCleared">5</b> / 13</span>
+    <span class="dot"></span>
+    <span>⭐ <b id="pStars">11</b></span>
+  </div>
+</div>
+
+<div id="demo">
+  <div class="lbl">战役进度</div>
+  <button class="mini-btn" id="btnReset">↺ 重置进度</button>
+</div>
+
+<div id="zoomers">
+  <button class="zbtn" id="btnIn" title="放大">＋</button>
+  <button class="zbtn" id="btnOut" title="缩小">－</button>
+  <button class="zbtn" id="btnFit" title="全览">⤢</button>
+</div>
+
+<div id="tips">拖动浏览 · 滚轮 / 双指缩放 · 点击旗帜查看关卡</div>
+
+<div id="tip">
+  <div class="t-name"><span class="no" id="tipNo">01</span><span id="tipName">孢子迷雾</span></div>
+  <div class="t-region" id="tipRegion">森林 · 第一幕</div>
+  <div class="t-state" id="tipState">⚔️ 可挑战</div>
+</div>
+
+<div id="shade"></div>
+
+<div id="card">
+  <div class="card-inner">
+    <div class="c-region" id="cRegion">森 林 · 第 一 幕</div>
+    <div class="c-head">
+      <div class="c-emoji" id="cEmoji">🍄</div>
+      <div>
+        <div class="c-name" id="cName">孢子迷雾</div>
+        <div class="c-no" id="cNo">第 1 关</div>
+      </div>
+    </div>
+    <div class="c-desc" id="cDesc"></div>
+    <div class="c-boss" id="cBoss"></div>
+    <div class="c-stars" id="cStars"></div>
+    <div class="c-btns">
+      <button class="btn ghost" id="btnClose">返回地图</button>
+      <button class="btn primary" id="btnEnter">进入关卡</button>
+    </div>
+    <div class="c-path" id="cPath">levels/0game.html</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="fileErr">
+  <div class="fe-card">
+    <div class="fe-title">找不到关卡文件</div>
+    <p>大地图在这两个位置都没找到 <code>0game.html</code>：</p>
+    <p><code>levels/0game.html</code><br><code>0game.html</code></p>
+    <p>请确认：<br>
+      ① <b>index.html、bridge.js 和 13 个关卡文件</b>放在同一个文件夹里（或者把关卡都放进 levels 子文件夹）；<br>
+      ② 不要在压缩包里直接双击 index.html，先把整个包解压出来。</p>
+    <p id="feZip" class="fe-zip" style="display:none"></p>
+    <p class="fe-url">当前页面：<span id="feUrl"></span></p>
+    <button id="feClose">知道了</button>
+    <div class="fe-ver">大地图版本 <span id="feVer">v2.1</span></div>
+  </div>
+</div>
+<div id="errBar"></div>
+
+<!-- 关卡容器：点旗帜后在这里加载对应的关卡文件 -->
+<div id="frameWrap">
+  <iframe id="levelFrame" src="about:blank" allow="fullscreen"></iframe>
+  <div id="frameTip">关卡进行中 · 左侧「返回大地图」可随时撤离</div>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+// ==================================================================
+//  基础
+// ==================================================================
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+
+const WORLD = { w: 3400, h: 1600 };
+const HORIZON = 560;
+
+const FONT_UI = '"Microsoft YaHei", "PingFang SC", sans-serif';
+const FONT_CN = '"STKaiti", "KaiTi", "Songti SC", "Microsoft YaHei", serif';
+
+// ==================================================================
+//  关卡数据（改这里就能加关卡 / 调位置）
+// ==================================================================
+const LEVELS = [
+  { id: 0,  region: 'forest',  name: '训练场',     emoji: '🎓', x: 250,  y: 1120,
+    desc: '森林前哨的训练场。艾尔·普里莫在这里教你建第一座塔。' },
+  { id: 1,  region: 'forest',  name: '孢子迷雾',   emoji: '🍄', x: 430,  y: 930,
+    desc: '紫雾笼罩的针叶林，眼眶泛红的变异野兽成群涌来。' },
+  { id: 2,  region: 'forest',  name: '亡灵沼泽',   emoji: '💀', x: 640,  y: 1080,
+    desc: '沼气翻涌，从泥里爬出来的东西已经不能算活物了。' },
+  { id: 3,  region: 'forest',  name: '孵化深渊',   emoji: '🥚', x: 845,  y: 870,
+    desc: '地底孵化场，八处蜘蛛巢穴同时开裂。' },
+  { id: 4,  region: 'forest',  name: '森林巨树',   emoji: '🌲', x: 1050, y: 1010,
+    desc: '巨树苏醒。森林之主要把入侵者碾进泥土里。', boss: '歪树人 🌲' },
+
+  { id: 5,  region: 'plateau', name: '断崖边境',   emoji: '🪨', x: 1265, y: 840,
+    desc: '断崖之上两座基地互为犄角，三路敌军同时压境。' },
+  { id: 6,  region: 'plateau', name: '基地外围',   emoji: '🧱', x: 1480, y: 760,
+    desc: '不可破坏的围墙之后，是叛军最后的据点。' },
+  { id: 7,  region: 'plateau', name: '航空基地',   emoji: '🛩️', x: 1705, y: 870,
+    desc: '螺旋桨的轰鸣盖过警报，运输车正在卸下成箱的兵。', boss: '运输车 🚚' },
+  { id: 8,  region: 'plateau', name: '强光控制室', emoji: '💡', x: 1920, y: 700,
+    desc: '培养皿与杂物堆的阴影里，藏着不该存在的通道。', boss: '空军将领歪费坤 🐣' },
+
+  { id: 9,  region: 'moon',    name: '月之暗面',   emoji: '🌑', x: 2190, y: 860,
+    desc: '真空里亮起三对传送门，敌人直接踏进你的腹地。' },
+  { id: 10, region: 'moon',    name: '陨石迷宫',   emoji: '☄️', x: 2420, y: 1030,
+    desc: '穹顶之上火雨不断，砸下来的时候敌我不分。' },
+  { id: 11, region: 'moon',    name: '歪星神殿',   emoji: '🛕', x: 2680, y: 780,
+    desc: '全视之眼悬在殿顶，走狗湛守在西端祭坛。', boss: '全视之眼 👁️‍🗨️ / 走狗湛 🐶' },
+  { id: 12, region: 'moon',    name: '歪星人王殿', emoji: '👽', x: 3050, y: 1080,
+    desc: '王座之间。与歪星人本尊的最后一战——它碎成几块，你就得追几次。', boss: '歪星人 👽' }
+];
+
+const REGIONS = [
+  { id: 'forest',  name: '森 林', sub: '第 一 幕 · 孢 子 迷 雾', x0: 0,    x1: 1150, start: 0,  labelX: 575,  labelY: 1205,
+    accent: '#7fd18a' },
+  { id: 'plateau', name: '高 原', sub: '第 二 幕 · 断 崖 前 线', x0: 1150, x1: 2120, start: 5,  labelX: 1635, labelY: 1240,
+    accent: '#e0b070' },
+  { id: 'moon',    name: '月 球', sub: '终 幕 · 歪 星 神 殿',   x0: 2120, x1: 3400, start: 9,  labelX: 2760, labelY: 1220,
+    accent: '#a9a7ff' }
+];
+
+// ==================================================================
+//  进度存档（与 bridge.js 共用同一个 key）
+// ==================================================================
+const SAVE_KEY = 'earthDefense.campaign.v1';
+const MAX_LEVELS = 13;
+
+const state = {
+  cleared: 0,   // 已通关关卡数：id < cleared 已通关，id === cleared 可挑战，其余锁定
+  stars: {}
+};
+
+function readSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== 'object') return null;
+    return d;
+  } catch (e) { return null; }
+}
+
+function loadSave() {
+  const d = readSave();
+  if (d) {
+    state.cleared = Math.max(0, Math.min(MAX_LEVELS, parseInt(d.cleared, 10) || 0));
+    state.stars = (d.stars && typeof d.stars === 'object') ? d.stars : {};
+  } else {
+    state.cleared = 0;
+    state.stars = {};
+  }
+}
+
+function refreshFromSave() {
+  loadSave();
+  updateHud();
+}
+
+function writeSave() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      cleared: state.cleared,
+      stars: state.stars
+    }));
+  } catch (e) {}
+}
+
+function levelState(id) {
+  if (id < state.cleared) return 'done';
+  if (id === state.cleared) return 'next';
+  return 'locked';
+}
+function totalStars() {
+  let s = 0;
+  for (const k in state.stars) s += state.stars[k];
+  return s;
+}
+function regionUnlocked(r) {
+  return state.cleared >= r.start;
+}
+
+// ==================================================================
+//  相机
+// ==================================================================
+const cam = { x: 0, y: 0, scale: 1, min: 0.25, max: 1.9 };
+
+function worldToScreen(wx, wy) {
+  return { x: wx * cam.scale + cam.x, y: wy * cam.scale + cam.y };
+}
+function screenToWorld(sx, sy) {
+  return { x: (sx - cam.x) / cam.scale, y: (sy - cam.y) / cam.scale };
+}
+function clampCam() {
+  const ww = WORLD.w * cam.scale, wh = WORLD.h * cam.scale;
+  const padX = 60, padY = 40;
+  if (ww <= W - padX * 2) cam.x = (W - ww) / 2;
+  else cam.x = Math.min(padX, Math.max(W - ww - padX, cam.x));
+  if (wh <= H - padY * 2) cam.y = (H - wh) / 2;
+  else cam.y = Math.min(padY, Math.max(H - wh - padY, cam.y));
+}
+function fitScale() {
+  return Math.min(W / WORLD.w, H / WORLD.h) * 0.98;
+}
+function zoomAt(sx, sy, factor) {
+  intro.done = true;
+  const before = screenToWorld(sx, sy);
+  cam.scale = Math.max(cam.min, Math.min(cam.max, cam.scale * factor));
+  const after = screenToWorld(sx, sy);
+  cam.x += (after.x - before.x) * cam.scale;
+  cam.y += (after.y - before.y) * cam.scale;
+  clampCam();
+}
+function centerOn(wx, wy, scale, instant) {
+  cam.scale = Math.max(cam.min, Math.min(cam.max, scale));
+  cam.x = W / 2 - wx * cam.scale;
+  cam.y = H / 2 - wy * cam.scale;
+  clampCam();
+  if (instant) intro.done = true;
+}
+
+// ==================================================================
+//  初始化 / 尺寸
+// ==================================================================
+let intro = { t: 0, dur: 1.9, done: false, from: null, to: null };
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = Math.floor(W * DPR);
+  canvas.height = Math.floor(H * DPR);
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  cam.min = fitScale();
+
+  if (!intro.done && intro.from && intro.to) {
+    // 重算动画起止点
+    intro.from = fitCam();
+    intro.to = focusCam(LEVELS[Math.min(state.cleared, LEVELS.length - 1)], 0.78);
+  } else if (!intro.done) {
+    // 首次
+    intro.from = fitCam();
+    intro.to = focusCam(LEVELS[Math.min(state.cleared, LEVELS.length - 1)], 0.78);
+    cam.scale = intro.from.scale;
+    cam.x = intro.from.x;
+    cam.y = intro.from.y;
+  }
+  clampCam();
+}
+
+function fitCam() {
+  const s = fitScale();
+  return { scale: s, x: (W - WORLD.w * s) / 2, y: (H - WORLD.h * s) / 2 };
+}
+function focusCam(lv, wantScale) {
+  const s = Math.max(cam.min, Math.min(cam.max, wantScale));
+  let x = W / 2 - lv.x * s;
+  let y = H / 2 - (lv.y - 60) * s;
+  // 夹紧
+  const ww = WORLD.w * s, wh = WORLD.h * s;
+  if (ww <= W - 120) x = (W - ww) / 2; else x = Math.min(60, Math.max(W - ww - 60, x));
+  if (wh <= H - 80) y = (H - wh) / 2; else y = Math.min(40, Math.max(H - wh - 40, y));
+  return { scale: s, x: x, y: y };
+}
+
+window.addEventListener('resize', resize);
+
+// ==================================================================
+//  工具
+// ==================================================================
+function lerp(a, b, t) { return a + (b - a) * t; }
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+// 地表顶端曲线
+const GROUND_PTS = [
+  { x: 0, y: 700 }, { x: 300, y: 660 }, { x: 600, y: 692 }, { x: 900, y: 650 },
+  { x: 1150, y: 684 }, { x: 1400, y: 724 }, { x: 1650, y: 694 }, { x: 1900, y: 652 },
+  { x: 2120, y: 692 }, { x: 2400, y: 724 }, { x: 2700, y: 684 }, { x: 3050, y: 704 },
+  { x: 3400, y: 662 }
+];
+
+function crPoint(p0, p1, p2, p3, t) {
+  const t2 = t * t, t3 = t2 * t;
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+  };
+}
+
+function buildSpline(pts, steps) {
+  const out = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    for (let s = 0; s < steps; s++) out.push(crPoint(p0, p1, p2, p3, s / steps));
+  }
+  out.push({ x: pts[pts.length - 1].x, y: pts[pts.length - 1].y });
+  return out;
+}
+
+const groundCurve = buildSpline(GROUND_PTS, 24);
+const GROUND_STEP = 24;
+
+function groundTopAt(x) {
+  const f = x / WORLD.w * (GROUND_PTS.length - 1);
+  const i = clamp(Math.floor(f), 0, GROUND_PTS.length - 2);
+  const t = clamp(f - i, 0, 1);
+  const a = GROUND_PTS[i], b = GROUND_PTS[i + 1];
+  // 平滑插值
+  const tt = t * t * (3 - 2 * t);
+  return lerp(a.y, b.y, tt);
+}
+
+// 路线（穿过所有旗帜）
+const ROUTE_STEPS = 26;
+const routePts = buildSpline(LEVELS.map(l => ({ x: l.x, y: l.y + 4 })), ROUTE_STEPS);
+function routeIndexForLevel(id) { return id * ROUTE_STEPS; }
+
+// ==================================================================
+//  装饰（种子随机，稳定不闪）
+// ==================================================================
+const deco = { forest: [], plateau: [], moon: [], stars: [], clouds: [], fires: [], dust: [] };
+(function buildDeco() {
+  const rnd = mulberry32(20261107);
+
+  // 森林：成片的树丛（有"林子"的密度感），再点缀零散大树
+  for (let c = 0; c < 17; c++) {
+    const cx = 50 + rnd() * 1070;
+    const cy = groundTopAt(cx) + 70 + rnd() * 280;
+    const n = 4 + Math.floor(rnd() * 5);
+    for (let i = 0; i < n; i++) {
+      deco.forest.push({
+        x: cx + (rnd() - 0.5) * 130,
+        y: cy + (rnd() - 0.5) * 48,
+        size: 26 + rnd() * 22,
+        e: ['🌲', '🌳', '🌲'][Math.floor(rnd() * 3)],
+        a: 0.6 + rnd() * 0.35,
+        shadow: true
+      });
+    }
+  }
+  for (let i = 0; i < 22; i++) {
+    const x = 30 + rnd() * 1100;
+    deco.forest.push({
+      x, y: groundTopAt(x) + 26 + rnd() * 340,
+      size: 30 + rnd() * 26,
+      e: ['🌲', '🌳'][Math.floor(rnd() * 2)],
+      a: 0.8 + rnd() * 0.2
+    });
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = 60 + rnd() * 1050;
+    deco.forest.push({ x, y: groundTopAt(x) + 90 + rnd() * 220, size: 16 + rnd() * 12, e: '🍄', a: 0.75 });
+  }
+
+  // 高原岩石
+  for (let i = 0; i < 13; i++) {
+    const x = 1180 + rnd() * 920;
+    deco.plateau.push({
+      x, y: groundTopAt(x) + 40 + rnd() * 320,
+      size: 12 + rnd() * 18,
+      e: ['🪨', '🪨', '⛰️'][Math.floor(rnd() * 3)],
+      a: 0.20 + rnd() * 0.22
+    });
+  }
+
+  // 月球碎石
+  for (let i = 0; i < 30; i++) {
+    const x = 2140 + rnd() * 1200;
+    deco.moon.push({
+      x, y: groundTopAt(x) + 40 + rnd() * 330,
+      size: 10 + rnd() * 14,
+      e: '🪨',
+      a: 0.35 + rnd() * 0.4
+    });
+  }
+
+  // 高原干裂纹（近景）
+  deco.cracks = [];
+  for (let i = 0; i < 10; i++) {
+    const x0 = 1200 + rnd() * 950;
+    const y0 = 1080 + rnd() * 170;
+    deco.cracks.push({ x: x0, y: y0, len: 70 + rnd() * 100, a: 0.08 + rnd() * 0.12 });
+  }
+
+  // 沼泽水洼（森林段下半屏）
+  deco.ponds = [
+    { x: 600, y: 1180, rx: 218, ry: 64 },
+    { x: 1005, y: 1232, rx: 152, ry: 46 }
+  ];
+
+  // ===== 森林感染：紫色菌毯 / 孢子 / 发光蘑菇（越往深处越浓）=====
+  deco.blight = [];
+  for (let i = 0; i < 8; i++) {
+    deco.blight.push({
+      x: 620 + rnd() * 500,
+      y: 740 + rnd() * 450,
+      r: 90 + rnd() * 140,
+      a: 0.09 + rnd() * 0.10,
+      p: rnd() * Math.PI * 2
+    });
+  }
+  deco.spores = [];
+  for (let i = 0; i < 48; i++) {
+    deco.spores.push({
+      x: 540 + rnd() * 600,
+      y: 690 + rnd() * 560,
+      p: rnd() * Math.PI * 2,
+      s: 0.35 + rnd() * 0.9,
+      r: 1.1 + rnd() * 2.0
+    });
+  }
+  deco.shrooms = [];
+  for (let i = 0; i < 13; i++) {
+    deco.shrooms.push({
+      x: 590 + rnd() * 520,
+      y: 810 + rnd() * 400,
+      s: 0.65 + rnd() * 0.75,
+      p: rnd() * Math.PI * 2
+    });
+  }
+
+  // ===== 高原积雪 =====
+  deco.snow = [];
+  for (let i = 0; i < 24; i++) {
+    const x = 1180 + rnd() * 910;
+    deco.snow.push({
+      x: x,
+      y: groundTopAt(x) + 20 + rnd() * 210,
+      r: 34 + rnd() * 46,
+      a: 0.16 + rnd() * 0.12,
+      p: rnd() * Math.PI * 2
+    });
+  }
+
+  // 星空（只出现在月球区域天空）
+  for (let i = 0; i < 190; i++) {
+    deco.stars.push({
+      x: 2080 + rnd() * 1380,
+      y: 30 + rnd() * 520,
+      r: 0.6 + rnd() * 1.8,
+      p: rnd() * Math.PI * 2,
+      s: 0.6 + rnd() * 1.6
+    });
+  }
+
+  // 云
+  for (let i = 0; i < 10; i++) {
+    deco.clouds.push({
+      x: 40 + rnd() * 2500,
+      y: 170 + rnd() * 300,
+      w: 52 + rnd() * 48,
+      h: 16 + rnd() * 16,
+      a: 0.035 + rnd() * 0.05,
+      v: 3 + rnd() * 7,
+      p: rnd() * Math.PI * 2
+    });
+  }
+
+  // 萤火虫（森林）
+  for (let i = 0; i < 34; i++) {
+    deco.fires.push({
+      x: 80 + rnd() * 1050,
+      y: 760 + rnd() * 460,
+      p: rnd() * Math.PI * 2,
+      s: 0.5 + rnd() * 1.2,
+      r: 1.4 + rnd() * 1.6
+    });
+  }
+
+  // 浮尘（高原 / 月球）
+  for (let i = 0; i < 60; i++) {
+    deco.dust.push({
+      x: 1150 + rnd() * 2200,
+      y: 620 + rnd() * 700,
+      p: rnd() * Math.PI * 2,
+      s: 0.3 + rnd() * 0.9,
+      r: 0.8 + rnd() * 1.4
+    });
+  }
+})();
+
+// ==================================================================
+//  输入
+// ==================================================================
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, moved = 0;
+let pinchDist = 0;
+let hoverId = -1;
+let cardLevel = null;
+
+function flagRadius(lv) { return (lv.boss ? 62 : 52); }
+
+function pickFlag(sx, sy) {
+  const w = screenToWorld(sx, sy);
+  let best = -1, bd = Infinity;
+  for (const lv of LEVELS) {
+    const d = Math.hypot(w.x - lv.x, w.y - (lv.y - 40));
+    const r = flagRadius(lv) * Math.max(0.85, cam.scale);
+    if (d < r && d < bd) { bd = d; best = lv.id; }
+  }
+  return best;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  intro.done = true;
+  dragging = true;
+  moved = 0;
+  downX = lastX = e.clientX;
+  downY = lastY = e.clientY;
+  canvas.classList.add('dragging');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (dragging) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    cam.x += dx; cam.y += dy;
+    clampCam();
+    lastX = e.clientX; lastY = e.clientY;
+  }
+  // hover
+  const id = pickFlag(e.clientX, e.clientY);
+  if (id !== hoverId) {
+    hoverId = id;
+    if (id >= 0) showTip(LEVELS[id], e.clientX, e.clientY);
+    else hideTip();
+    canvas.classList.toggle('pointing', id >= 0);
+  } else if (id >= 0) {
+    moveTip(e.clientX, e.clientY);
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  canvas.classList.remove('dragging');
+});
+
+canvas.addEventListener('click', (e) => {
+  if (moved > 8) return;
+  const id = pickFlag(e.clientX, e.clientY);
+  if (id < 0) return;
+  const lv = LEVELS[id];
+  if (levelState(lv.id) === 'locked') {
+    toast('🔒 先通关前面的关卡，才能踏进「' + lv.name + '」');
+    return;
+  }
+  openCard(lv);
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, e.deltaY > 0 ? 0.9 : 1.1);
+}, { passive: false });
+
+// 触摸
+canvas.addEventListener('touchstart', (e) => {
+  intro.done = true;
+  if (e.touches.length === 1) {
+    dragging = true; moved = 0;
+    downX = lastX = e.touches[0].clientX;
+    downY = lastY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    dragging = false;
+    pinchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (e.touches.length === 1 && dragging) {
+    const dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    cam.x += dx; cam.y += dy;
+    clampCam();
+    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+  } else if (e.touches.length === 2) {
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if (pinchDist > 0) {
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      zoomAt(mx, my, d / pinchDist);
+    }
+    pinchDist = d;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  if (dragging && moved < 10 && e.changedTouches.length) {
+    const t = e.changedTouches[0];
+    const id = pickFlag(t.clientX, t.clientY);
+    if (id >= 0) {
+      const lv = LEVELS[id];
+      if (levelState(lv.id) === 'locked') toast('🔒 先通关前面的关卡，才能踏进「' + lv.name + '」');
+      else openCard(lv);
+    }
+  }
+  dragging = false;
+  pinchDist = 0;
+});
+
+// 按钮
+document.getElementById('btnIn').onclick = () => zoomAt(W / 2, H / 2, 1.25);
+document.getElementById('btnOut').onclick = () => zoomAt(W / 2, H / 2, 0.8);
+document.getElementById('btnFit').onclick = () => {
+  intro.done = true;
+  const f = fitCam();
+  cam.scale = f.scale; cam.x = f.x; cam.y = f.y;
+  clampCam();
+};
+document.getElementById('btnClose').onclick = closeCard;
+document.getElementById('feClose').onclick = () => document.getElementById('fileErr').classList.remove('show');
+document.getElementById('shade').onclick = closeCard;
+
+document.getElementById('btnReset').onclick = () => {
+  state.cleared = 0;
+  state.stars = {};
+  writeSave();
+  updateHud();
+  const f = fitCam();
+  cam.scale = f.scale; cam.x = f.x; cam.y = f.y;
+  clampCam();
+  toast('↺ 战役进度已重置，从训练场重新出发');
+};
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeCard();
+});
+
+// ==================================================================
+//  卡片 / 提示
+// ==================================================================
+function openCard(lv) {
+  cardLevel = lv;
+  const r = REGIONS.find(r => r.id === lv.region);
+  document.getElementById('cRegion').textContent = r ? r.name.replace(/\s/g, '') + ' · ' + r.sub.replace(/\s/g, '') : '';
+  document.getElementById('cEmoji').textContent = lv.emoji;
+  document.getElementById('cName').textContent = lv.name;
+  document.getElementById('cNo').textContent = '第 ' + lv.id + ' 关';
+  document.getElementById('cDesc').textContent = lv.desc;
+  const pathEl = document.getElementById('cPath');
+  if (pathEl) pathEl.textContent = '关卡文件：' + (LEVEL_DIR || '') + lv.id + 'game.html';
+
+  const bossEl = document.getElementById('cBoss');
+  if (lv.boss) { bossEl.textContent = 'BOSS：' + lv.boss; bossEl.classList.add('show'); }
+  else bossEl.classList.remove('show');
+
+  const st = document.getElementById('cStars');
+  const got = state.stars[lv.id] || 0;
+  const isDone = levelState(lv.id) === 'done';
+  st.innerHTML = '';
+  if (!isDone) {
+    st.innerHTML = '<span style="font-size:12px;letter-spacing:2px;color:rgba(200,220,200,.55)">尚未通关 · 无星级记录</span>';
+  } else {
+    for (let i = 1; i <= 3; i++) {
+      const s = document.createElement('span');
+      s.textContent = '★';
+      if (i > got) s.className = 'empty';
+      st.appendChild(s);
+    }
+    const t = document.createElement('span');
+    t.className = 'txt';
+    t.textContent = got + ' / 3 星';
+    st.appendChild(t);
+  }
+
+  document.getElementById('shade').classList.add('show');
+  document.getElementById('card').classList.add('show');
+  focusOnLevel(lv);
+}
+
+function closeCard() {
+  document.getElementById('shade').classList.remove('show');
+  document.getElementById('card').classList.remove('show');
+  cardLevel = null;
+}
+
+document.getElementById('btnEnter').onclick = () => {
+  if (!cardLevel) return;
+  enterLevel(cardLevel);
+};
+
+// ==================================================================
+//  进入关卡 / 退出关卡
+// ==================================================================
+const USE_IFRAME = location.protocol !== 'file:';  // file:// 下 iframe 读不到存档，改用整页跳转
+let frameOpen = false;
+
+// 关卡目录：依次探测 levels/ 与同级目录，两个都没有就明确弹窗说明
+const MAP_VER = 'v2.1';
+let LEVEL_DIR = 'levels/';
+let BACK_TO_MAP = '../index.html';
+let LEVEL_DIR_OK = false;
+let dirReady = null;
+
+function probeFile(url) {
+  return new Promise((resolve) => {
+    if (location.protocol === 'file:') {
+      const s = document.createElement('script');
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        try { s.remove(); } catch (e) {}
+        resolve(ok);
+      };
+      s.src = url;
+      s.onload = () => finish(true);
+      s.onerror = () => finish(false);
+      document.head.appendChild(s);
+      setTimeout(() => finish(false), 2500);
+    } else {
+      fetch(url, { method: 'HEAD' })
+        .then(r => resolve(r.ok))
+        .catch(() => resolve(false));
+    }
+  });
+}
+
+function detectLevelDir() {
+  if (dirReady) return dirReady;
+  dirReady = (async () => {
+    const cands = [
+      { dir: 'levels/', back: '../index.html' },
+      { dir: '', back: 'index.html' }
+    ];
+    for (const c of cands) {
+      if (await probeFile(c.dir + '0game.html')) {
+        LEVEL_DIR = c.dir;
+        BACK_TO_MAP = c.back;
+        LEVEL_DIR_OK = true;
+        return;
+      }
+    }
+    LEVEL_DIR = '';
+    BACK_TO_MAP = 'index.html';
+    LEVEL_DIR_OK = false;
+  })();
+  return dirReady;
+}
+
+function levelPath(id) {
+  return LEVEL_DIR + id + 'game.html?from=map&back=' + encodeURIComponent(BACK_TO_MAP);
+}
+
+function showFileErr() {
+  const el = document.getElementById('fileErr');
+  if (!el) { showErr('找不到关卡文件'); return; }
+  const u = document.getElementById('feUrl');
+  if (u) u.textContent = location.href;
+  const v = document.getElementById('feVer');
+  if (v) v.textContent = MAP_VER;
+
+  // 判断是不是在压缩包里直接打开的（Windows 会把单个文件解到 Temp\...\xxx.zip\ 下）
+  const rawHref = decodeURIComponent(location.href);
+  const inZip = /\.zip[\\/]/i.test(rawHref) || /AppData[\\/]Local[\\/]Temp[\\/]/i.test(rawHref);
+  const zipEl = document.getElementById('feZip');
+  if (zipEl) {
+    if (inZip) {
+      zipEl.style.display = 'block';
+      zipEl.innerHTML = '⚠️ 检测到你是在压缩包里直接双击 index.html 的（地址里带 .zip）。' +
+        'Windows 只会把这一个文件解到临时目录，13 个关卡并不在旁边，所以必然找不到。' +
+        '正确做法：<b>右键压缩包 → 全部解压缩</b>，打开解压出来的文件夹，再双击里面的 index.html。';
+    } else {
+      zipEl.style.display = 'none';
+    }
+  }
+  el.classList.add('show');
+}
+
+async function enterLevel(lv) {
+  let url = '';
+  try {
+    closeCard();
+    await detectLevelDir();
+    if (!LEVEL_DIR_OK) { showFileErr(); return; }
+    url = levelPath(lv.id);
+    if (!USE_IFRAME) {
+      location.href = url;      // 本地双击打开：直接跳转，靠 bridge.js 的返回按钮回来
+      return;
+    }
+    const wrap = document.getElementById('frameWrap');
+    const f = document.getElementById('levelFrame');
+    if (!wrap || !f) throw new Error('页面里缺少 #frameWrap（index.html 版本不对）');
+    frameOpen = true;
+    f.src = url;
+    wrap.classList.add('show');
+    const tip = document.getElementById('frameTip');
+    if (tip) {
+      tip.classList.add('show');
+      setTimeout(() => tip.classList.remove('show'), 3200);
+    }
+  } catch (err) {
+    frameOpen = false;
+    showErr('关卡启动失败：' + err.message + '（目标：' + url + '）');
+  }
+}
+
+function showErr(msg) {
+  const bar = document.getElementById('errBar');
+  if (!bar) { console.error(msg); return; }
+  bar.textContent = '❌ ' + msg;
+  bar.style.display = 'block';
+  clearTimeout(showErr._t);
+  showErr._t = setTimeout(() => { bar.style.display = 'none'; }, 15000);
+}
+
+window.addEventListener('error', (e) => {
+  if (!e || !e.message) return;
+  // 目录探测会加载一个跨源脚本，报 'Script error.' 是正常的，不弹红条
+  if (e.message === 'Script error.' && !e.filename) return;
+  showErr(e.message + '  @' + (e.filename || '').split('/').pop() + ':' + (e.lineno || ''));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  showErr('Promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+
+function closeFrame() {
+  const wrap = document.getElementById('frameWrap');
+  const f = document.getElementById('levelFrame');
+  frameOpen = false;
+  wrap.classList.remove('show');
+  setTimeout(() => { try { f.src = 'about:blank'; } catch (e) {} }, 240);
+  refreshFromSave();
+  const lv = LEVELS[Math.min(state.cleared, LEVELS.length - 1)];
+  if (lv) focusOnLevel(lv);
+}
+
+// 关卡内的 bridge.js 会往这里发消息
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__src !== 'earthDefense') return;
+
+  if (d.type === 'exit') {
+    closeFrame();
+    return;
+  }
+
+  // 通关后点「进入下一关」：先按存档刷新，再开下一关
+  if (d.type === 'next') {
+    closeFrame();
+    const nx = LEVELS[d.next];
+    if (nx) setTimeout(() => enterLevel(nx), 320);
+    return;
+  }
+  if (d.type === 'result') {
+    refreshFromSave();
+    // 关卡还开着的时候父页面的提示会被 iframe 挡住，等退出时再看结果
+    if (!frameOpen) {
+      if (d.win) {
+        const lv = LEVELS[d.id];
+        toast('🎉 「' + (lv ? lv.name : d.id) + '」通关！' + '★'.repeat(d.stars || 0));
+      } else {
+        const lv = LEVELS[d.id];
+        toast('💀 「' + (lv ? lv.name : d.id) + '」失守了，可以再来一次');
+      }
+    }
+  }
+});
+
+function focusOnLevel(lv) {
+  intro.done = true;
+  const target = focusCam(lv, Math.max(cam.scale, 0.92));
+  animateCam(target, 420);
+}
+
+let camAnim = null;
+function animateCam(target, dur) {
+  camAnim = { from: { x: cam.x, y: cam.y, scale: cam.scale }, to: target, t: 0, dur: dur };
+}
+
+function showTip(lv, sx, sy) {
+  const r = REGIONS.find(r => r.id === lv.region);
+  document.getElementById('tipNo').textContent = '第 ' + lv.id + ' 关';
+  document.getElementById('tipName').textContent = lv.name;
+  document.getElementById('tipRegion').textContent = (r ? r.name.replace(/\s/g, '') : '') + (lv.boss ? ' · BOSS' : '');
+  const stEl = document.getElementById('tipState');
+  const st = levelState(lv.id);
+  if (st === 'done') { stEl.textContent = '⭐ 已通关 ' + (state.stars[lv.id] || 0) + ' 星'; stEl.className = 't-state done'; }
+  else if (st === 'next') { stEl.textContent = '⚔️ 可挑战'; stEl.className = 't-state'; }
+  else { stEl.textContent = '🔒 未解锁'; stEl.className = 't-state lock'; }
+  document.getElementById('tip').classList.add('show');
+  moveTip(sx, sy);
+}
+function moveTip(sx, sy) {
+  const el = document.getElementById('tip');
+  let x = sx + 18, y = sy + 18;
+  const w = el.offsetWidth || 180, h = el.offsetHeight || 70;
+  if (x + w > W - 10) x = sx - w - 14;
+  if (y + h > H - 10) y = sy - h - 14;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+function hideTip() {
+  document.getElementById('tip').classList.remove('show');
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.innerHTML = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+function updateHud() {
+  document.getElementById('pCleared').textContent = state.cleared;
+  document.getElementById('pStars').textContent = totalStars();
+}
+
+// ==================================================================
+//  绘制
+// ==================================================================
+function setLayer(parallax) {
+  // 以“整张地图居中”的位置为锚点做视差，远景才不会在初始视角被推飞
+  const baseX = (W - WORLD.w * cam.scale) / 2;
+  const baseY = (H - WORLD.h * cam.scale) / 2;
+  const ox = baseX + (cam.x - baseX) * parallax;
+  const oy = baseY + (cam.y - baseY) * parallax;
+  ctx.setTransform(DPR * cam.scale, 0, 0, DPR * cam.scale, DPR * ox, DPR * oy);
+}
+
+function setScreen() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+
+// ---------- 天空 ----------
+function drawSky(t) {
+  setLayer(0.18);
+  // 横向色带：黎明森林 → 黄昏高原 → 深空月球
+  const g = ctx.createLinearGradient(0, 0, WORLD.w, 0);
+  g.addColorStop(0.00, '#12302a');
+  g.addColorStop(0.10, '#1d4a38');
+  g.addColorStop(0.22, '#376b43');
+  g.addColorStop(0.30, '#6f6739');
+  g.addColorStop(0.38, '#a07a39');
+  g.addColorStop(0.48, '#c08a37');
+  g.addColorStop(0.55, '#a06a35');
+  g.addColorStop(0.60, '#6a4141');
+  g.addColorStop(0.64, '#3a2c4c');
+  g.addColorStop(0.68, '#1b1836');
+  g.addColorStop(0.76, '#0d0d24');
+  g.addColorStop(0.88, '#08091a');
+  g.addColorStop(1.00, '#05060f');
+  ctx.fillStyle = g;
+  ctx.fillRect(-3000, -2400, WORLD.w + 6000, 4400);
+
+  // 大气压暗（上深下亮）
+  const gv = ctx.createLinearGradient(0, -200, 0, 760);
+  gv.addColorStop(0, 'rgba(0,0,0,0.42)');
+  gv.addColorStop(0.55, 'rgba(0,0,0,0.10)');
+  gv.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gv;
+  ctx.fillRect(-3000, -2400, WORLD.w + 6000, 4400);
+
+  // 森林深处渗出的紫色孢子云（被感染的迹象）
+  const bl = ctx.createLinearGradient(480, 0, 1260, 0);
+  bl.addColorStop(0, 'rgba(130,70,210,0)');
+  bl.addColorStop(0.55, 'rgba(140,80,215,0.045)');
+  bl.addColorStop(1, 'rgba(162,96,232,0.13)');
+  ctx.fillStyle = bl;
+  ctx.fillRect(380, -300, 1100, 1400);
+
+  // 云（径向渐变堆出的软边云，避免硬边小圆点）
+  for (const c of deco.clouds) {
+    const x = c.x + t * c.v;
+    for (let i = 0; i < 5; i++) {
+      const px = x + (i - 2) * c.w * 0.34;
+      const py = c.y + Math.sin(i * 1.7 + c.p) * c.h * 0.30;
+      const r = c.w * (0.44 + 0.14 * Math.sin(i * 2.3 + c.p));
+      const pg = ctx.createRadialGradient(px, py, 0, px, py, r);
+      pg.addColorStop(0, 'rgba(255,242,220,' + (c.a * 1.5) + ')');
+      pg.addColorStop(0.55, 'rgba(255,242,220,' + (c.a * 0.7) + ')');
+      pg.addColorStop(1, 'rgba(255,242,220,0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 太阳
+  const sunX = 780, sunY = 330;
+  const sg = ctx.createRadialGradient(sunX, sunY, 20, sunX, sunY, 300);
+  sg.addColorStop(0, 'rgba(255,226,140,0.50)');
+  sg.addColorStop(0.20, 'rgba(255,190,80,0.24)');
+  sg.addColorStop(0.55, 'rgba(255,160,50,0.08)');
+  sg.addColorStop(1, 'rgba(255,150,40,0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.arc(sunX, sunY, 300, 0, Math.PI * 2); ctx.fill();
+
+  const core = ctx.createRadialGradient(sunX - 10, sunY - 12, 4, sunX, sunY, 46);
+  core.addColorStop(0, '#fff8dd');
+  core.addColorStop(0.55, '#ffd47e');
+  core.addColorStop(1, 'rgba(250,170,70,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, Math.PI * 2); ctx.fill();
+
+  // 星星（月球区域）
+  for (const s of deco.stars) {
+    const tw = 0.55 + 0.45 * Math.sin(t * s.s + s.p);
+    ctx.fillStyle = 'rgba(200,215,255,' + (0.25 + tw * 0.65) + ')';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (0.8 + tw * 0.4), 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 地球（月球段天际）
+  drawEarth(3000, 300, 86, t);
+}
+
+function drawEarth(x, y, r, t) {
+  // 光晕
+  const glow = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 2.6);
+  glow.addColorStop(0, 'rgba(90,170,255,0.35)');
+  glow.addColorStop(0.4, 'rgba(70,140,255,0.10)');
+  glow.addColorStop(1, 'rgba(60,120,255,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x, y, r * 2.6, 0, Math.PI * 2); ctx.fill();
+
+  // 海
+  const og = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.2, x, y, r);
+  og.addColorStop(0, '#5aa8ff');
+  og.addColorStop(0.6, '#2f6fd0');
+  og.addColorStop(1, '#123a78');
+  ctx.fillStyle = og;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // 陆地（几块不规则绿斑）
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r * 0.985, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = 'rgba(90,190,120,0.9)';
+  const blobs = [
+    [-0.30, -0.25, 0.34, 0.22, -0.4],
+    [0.25, -0.35, 0.24, 0.16, 0.3],
+    [0.15, 0.20, 0.30, 0.26, 0.1],
+    [-0.35, 0.42, 0.22, 0.14, -0.2]
+  ];
+  for (const b of blobs) {
+    ctx.beginPath();
+    ctx.ellipse(x + b[0] * r, y + b[1] * r, b[2] * r, b[3] * r, b[4], 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 云带
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(x + (i - 1) * r * 0.5, y + Math.sin(t * 0.1 + i) * r * 0.25, r * 0.26, r * 0.09, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // 晨昏线
+  const term = ctx.createLinearGradient(x - r, y, x + r, y);
+  term.addColorStop(0, 'rgba(0,0,0,0)');
+  term.addColorStop(0.62, 'rgba(0,0,0,0.10)');
+  term.addColorStop(1, 'rgba(0,0,0,0.62)');
+  ctx.fillStyle = term;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // 大气层边缘
+  ctx.strokeStyle = 'rgba(150,210,255,0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+}
+
+// ---------- 远景剪影 ----------
+function drawFar(t) {
+  setLayer(0.55);
+
+  // 森林树线
+  ctx.fillStyle = 'rgba(10,32,20,0.85)';
+  for (let x = -40; x < 1180; x += 46) {
+    const gy = 596 + Math.sin(x * 0.01) * 10;
+    const h = 60 + ((x * 7919) % 70);
+    ctx.beginPath();
+    ctx.moveTo(x, gy + 90);
+    ctx.lineTo(x + 26, gy - h + 90);
+    ctx.lineTo(x + 52, gy + 90);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 高原雪山（远景区，雪线以上是白色）
+  drawPeaks();
+
+  // 高原台地（远景区，圆润轮廓 + 顶缘受光）
+  const mesas = [[1210, 640, 190, 84], [1450, 662, 250, 66], [1770, 628, 210, 104], [2000, 656, 170, 74]];
+  for (const m of mesas) {
+    const mx = m[0], my = m[1], mw = m[2], mh = m[3];
+    ctx.beginPath();
+    ctx.moveTo(mx - mw / 2, my + 140);
+    ctx.quadraticCurveTo(mx - mw / 2 + 8, my - mh * 0.55, mx - mw * 0.30, my - mh);
+    ctx.quadraticCurveTo(mx, my - mh - 10, mx + mw * 0.30, my - mh);
+    ctx.quadraticCurveTo(mx + mw / 2 - 6, my - mh * 0.55, mx + mw / 2, my + 140);
+    ctx.closePath();
+    const mg = ctx.createLinearGradient(0, my - mh, 0, my + 130);
+    mg.addColorStop(0, 'rgba(112,80,46,0.92)');
+    mg.addColorStop(1, 'rgba(62,43,25,0.95)');
+    ctx.fillStyle = mg;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,205,140,0.24)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(mx - mw * 0.30, my - mh);
+    ctx.quadraticCurveTo(mx, my - mh - 10, mx + mw * 0.30, my - mh);
+    ctx.stroke();
+
+    // 低矮台地不积雪，让它退到雪山前面
+
+  }
+
+  // 月球环形山
+  ctx.strokeStyle = 'rgba(90,90,130,0.55)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 7; i++) {
+    const cx = 2200 + i * 180;
+    const cy = 610 + (i % 3) * 22;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 90 + i * 12, 26 + (i % 2) * 8, 0, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// ---------- 地面 ----------
+function drawGround(t) {
+  setLayer(1);
+  const pts = groundCurve;
+
+  // ---- 主地面 ----
+  const g = ctx.createLinearGradient(0, 0, WORLD.w, 0);
+  g.addColorStop(0.00, '#245a35');
+  g.addColorStop(0.10, '#2c6740');
+  g.addColorStop(0.22, '#357244');
+  g.addColorStop(0.30, '#5d6350');
+  g.addColorStop(0.38, '#7b6d58');
+  g.addColorStop(0.48, '#8e7f66');
+  g.addColorStop(0.56, '#76655a');
+  g.addColorStop(0.61, '#5a4140');
+  g.addColorStop(0.65, '#453d5e');
+  g.addColorStop(0.72, '#393652');
+  g.addColorStop(0.85, '#34314c');
+  g.addColorStop(1.00, '#2c2a44');
+
+  ctx.beginPath();
+  ctx.moveTo(-300, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.lineTo(WORLD.w + 300, pts[pts.length - 1].y);
+  ctx.lineTo(WORLD.w + 300, WORLD.h + 2000);
+  ctx.lineTo(-300, WORLD.h + 2000);
+  ctx.closePath();
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // ---- 地平线亮边（晨昏光照在地平线上）----
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.strokeStyle = 'rgba(255,236,180,0.30)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // ---- 层叠丘陵：明暗交替，制造起伏 ----
+  drawBand(66, 26, 0.4, 'rgba(255,238,180,0.055)');
+  drawBand(158, 40, 2.1, 'rgba(0,0,0,0.10)');
+  drawBand(286, 54, 4.0, 'rgba(255,238,180,0.035)');
+  drawBand(438, 66, 1.2, 'rgba(0,0,0,0.13)');
+  drawBand(640, 78, 3.0, 'rgba(0,0,0,0.11)');
+
+  // 高原积雪（贴地层，压在丘陵之上）
+  drawSnow(t);
+
+  // 高低差：台地边缘 / 裂谷 / 山影
+  drawRelief(t);
+  drawTableland(t);
+
+  // ---- 前景压暗 ----
+  const fg = ctx.createLinearGradient(0, 1200, 0, WORLD.h);
+  fg.addColorStop(0, 'rgba(0,0,0,0)');
+  fg.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = fg;
+  ctx.fillRect(-300, 1200, WORLD.w + 600, 2400);
+}
+
+function drawBand(off, amp, phase, color) {
+  ctx.beginPath();
+  ctx.moveTo(-300, WORLD.h + 300);
+  for (let x = -300; x <= WORLD.w + 300; x += 70) {
+    const y = groundTopAt(x) + off
+      + Math.sin(x * 0.0022 + phase) * amp
+      + Math.sin(x * 0.0009 + phase * 2) * amp * 0.5;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(WORLD.w + 300, WORLD.h + 300);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+// ---------- 装饰 ----------
+function drawDeco(t) {
+  setLayer(1);
+
+  // 森林被孢子感染：紫色菌毯铺在树底下
+  drawBlight(t);
+
+  // 森林（树丛先垫一层暗色树冠，密林才有体积）
+  for (const d of deco.forest) {
+    if (d.shadow) {
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = '#0a1f12';
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y + d.size * 0.32, d.size * 0.62, d.size * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  for (const d of deco.forest) {
+    ctx.globalAlpha = d.a;
+    ctx.font = d.size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d.e, d.x, d.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // 深林被孢子侵蚀：整片罩一层紫，越靠深处越浓
+  const vg = ctx.createRadialGradient(950, 980, 40, 950, 980, 440);
+  vg.addColorStop(0, 'rgba(128,60,198,0.20)');
+  vg.addColorStop(0.55, 'rgba(116,52,186,0.10)');
+  vg.addColorStop(1, 'rgba(104,46,172,0)');
+  ctx.fillStyle = vg;
+  ctx.beginPath();
+  ctx.ellipse(950, 980, 490, 305, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 发光的变异蘑菇
+  drawShrooms(t);
+
+  // 高原
+  for (const d of deco.plateau) {
+    ctx.globalAlpha = d.a;
+    ctx.font = d.size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d.e, d.x, d.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // 月球碎石
+  for (const d of deco.moon) {
+    ctx.globalAlpha = d.a;
+    ctx.font = d.size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(d.e, d.x, d.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // 月球环形山（地面上）
+  for (let i = 0; i < 5; i++) {
+    const cx = 2250 + i * 210;
+    const cy = 900 + (i % 3) * 120;
+    const rx = 70 + i * 8, ry = 22 + (i % 2) * 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(150,150,190,0.16)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy - 2, rx, ry, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  }
+
+  // 高原干裂纹（近景）
+  drawCracks();
+
+  // 沼泽水洼
+  for (const p of deco.ponds) drawPond(p, t);
+
+  // 第7关地标：航空基地
+  drawAirbase(1705, 1040, t);
+
+  // 终点王殿
+  drawTemple(3050, 892, t);
+
+  // 训练营
+  ctx.globalAlpha = 0.9;
+  ctx.font = '44px serif';
+  ctx.fillText('🏕️', 250, 1108);
+  ctx.globalAlpha = 1;
+
+  // 萤火虫
+  for (const f of deco.fires) {
+    const x = f.x + Math.sin(t * f.s + f.p) * 26;
+    const y = f.y + Math.cos(t * f.s * 0.8 + f.p) * 18;
+    const a = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(t * 1.6 + f.p));
+    ctx.fillStyle = 'rgba(220,255,150,' + a + ')';
+    ctx.beginPath(); ctx.arc(x, y, f.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(180,255,120,' + (a * 0.16) + ')';
+    ctx.beginPath(); ctx.arc(x, y, f.r * 5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 紫色孢子（空气中飘）
+  drawSpores(t);
+
+  // 浮尘
+  for (const d of deco.dust) {
+    const x = ((d.x + t * 14 * d.s) % 3400);
+    const y = d.y + Math.sin(t * 0.7 + d.p) * 12;
+    ctx.fillStyle = 'rgba(220,210,190,' + (0.10 + d.s * 0.10) + ')';
+    ctx.beginPath(); ctx.arc(x, y, d.r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawCracks() {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const c of deco.cracks) {
+    ctx.strokeStyle = 'rgba(0,0,0,' + c.a + ')';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x + c.len * 0.45, c.y + c.len * 0.16);
+    ctx.lineTo(c.x + c.len, c.y + c.len * 0.06);
+    ctx.moveTo(c.x + c.len * 0.30, c.y + c.len * 0.11);
+    ctx.lineTo(c.x + c.len * 0.42, c.y + c.len * 0.44);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawPond(p, t) {
+  ctx.save();
+  const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, p.rx);
+  g.addColorStop(0, 'rgba(64,128,96,0.60)');
+  g.addColorStop(0.65, 'rgba(32,74,62,0.48)');
+  g.addColorStop(1, 'rgba(18,42,38,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 水面反光
+  ctx.strokeStyle = 'rgba(170,225,190,0.20)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y - 2, p.rx * 0.66, p.ry * 0.5, 0, Math.PI * 1.08, Math.PI * 1.92);
+  ctx.stroke();
+
+  // 气泡
+  for (let i = 0; i < 4; i++) {
+    const bx = p.x + Math.sin(t * 0.6 + i * 2.1) * p.rx * 0.45;
+    const by = p.y + Math.cos(t * 0.5 + i * 1.7) * p.ry * 0.4;
+    ctx.fillStyle = 'rgba(190,240,200,0.10)';
+    ctx.beginPath(); ctx.arc(bx, by, 2 + (i % 2), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ---------- 森林感染 ----------
+function drawBlight(t) {
+  for (const b of deco.blight) {
+    const pulse = 0.75 + 0.25 * Math.sin(t * 0.8 + b.p);
+    const g = ctx.createRadialGradient(b.x, b.y, 4, b.x, b.y, b.r);
+    g.addColorStop(0, 'rgba(152,82,226,' + (b.a * pulse * 1.5) + ')');
+    g.addColorStop(0.55, 'rgba(118,58,188,' + (b.a * pulse * 0.75) + ')');
+    g.addColorStop(1, 'rgba(88,38,148,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y, b.r, b.r * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 菌丝
+    ctx.strokeStyle = 'rgba(172,112,238,' + (b.a * 1.1) + ')';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 3; i++) {
+      const a0 = b.p + i * 2.1;
+      ctx.beginPath();
+      ctx.moveTo(b.x + Math.cos(a0) * b.r * 0.16, b.y + Math.sin(a0) * b.r * 0.07);
+      ctx.quadraticCurveTo(
+        b.x + Math.cos(a0 + 0.5) * b.r * 0.6, b.y + Math.sin(a0 + 0.5) * b.r * 0.24,
+        b.x + Math.cos(a0 + 0.95) * b.r * 0.96, b.y + Math.sin(a0 + 0.95) * b.r * 0.36
+      );
+      ctx.stroke();
+    }
+  }
+}
+
+function drawShrooms(t) {
+  for (const s of deco.shrooms) {
+    const pulse = 0.7 + 0.3 * Math.sin(t * 1.6 + s.p);
+    const r = 14 * s.s;
+
+    const g = ctx.createRadialGradient(s.x, s.y - 6 * s.s, 2, s.x, s.y - 6 * s.s, r * 2.4);
+    g.addColorStop(0, 'rgba(182,122,255,' + (0.20 * pulse) + ')');
+    g.addColorStop(1, 'rgba(140,80,220,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(s.x, s.y - 6 * s.s, r * 2.4, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = 'rgba(228,222,242,0.85)';
+    ctx.fillRect(s.x - 1.6 * s.s, s.y - 8 * s.s, 3.2 * s.s, 9 * s.s);
+
+    ctx.fillStyle = 'rgba(152,92,228,' + (0.72 + 0.28 * pulse) + ')';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y - 9 * s.s, 7.5 * s.s, 5.2 * s.s, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(228,196,255,0.9)';
+    ctx.beginPath(); ctx.arc(s.x - 2.4 * s.s, s.y - 11 * s.s, 1.1 * s.s, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(s.x + 2.2 * s.s, s.y - 10 * s.s, 0.9 * s.s, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawSpores(t) {
+  for (const s of deco.spores) {
+    const y = s.y - ((t * 16 * s.s) % 100);
+    const x = s.x + Math.sin(t * 0.7 * s.s + s.p) * 22;
+    const a = 0.30 + 0.45 * (0.5 + 0.5 * Math.sin(t * 1.4 + s.p));
+    ctx.fillStyle = 'rgba(150,90,230,' + (a * 0.18) + ')';
+    ctx.beginPath(); ctx.arc(x, y, s.r * 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(196,140,255,' + a + ')';
+    ctx.beginPath(); ctx.arc(x, y, s.r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ---------- 高低差：台地 / 裂谷 / 山影 ----------
+function drawRelief(t) {
+  // 雪山投在高原上的长影（画面里最强的"高度"暗示）
+  const shadows = [
+    { x: 1230, y: 720, w: 430, len: 250, a: 0.15 },
+    { x: 1560, y: 706, w: 540, len: 320, a: 0.13 },
+    { x: 1900, y: 716, w: 470, len: 270, a: 0.12 }
+  ];
+  for (const s of shadows) {
+    const g = ctx.createLinearGradient(s.x, s.y, s.x + s.len, s.y + s.len * 0.5);
+    g.addColorStop(0, 'rgba(8,6,12,' + s.a + ')');
+    g.addColorStop(1, 'rgba(8,6,12,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(s.x - s.w / 2, s.y);
+    ctx.lineTo(s.x + s.w / 2, s.y);
+    ctx.lineTo(s.x + s.w / 2 + s.len, s.y + s.len * 0.5);
+    ctx.lineTo(s.x - s.w / 2 + s.len * 0.85, s.y + s.len * 0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+
+  // 月面裂谷（深色的地缝，缝底透紫光）
+  drawRift(2560, 1128, 400, t);
+}
+
+function drawTableland(t) {
+  const edgeY = 1280;
+  const pts = [];
+  for (let x = -320; x <= WORLD.w + 320; x += 44) {
+    pts.push({
+      x: x,
+      y: edgeY
+        + Math.sin(x * 0.0017 + 0.7) * 34
+        + Math.sin(x * 0.00062) * 20
+        + Math.sin(x * 0.0043) * 6
+    });
+  }
+
+  // 崖壁
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (const p of pts) ctx.lineTo(p.x, p.y);
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i].x, pts[i].y + 210);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, edgeY - 20, 0, edgeY + 210);
+  g.addColorStop(0, 'rgba(112,90,66,0.97)');
+  g.addColorStop(0.30, 'rgba(74,58,44,0.99)');
+  g.addColorStop(0.72, 'rgba(40,32,27,1)');
+  g.addColorStop(1, 'rgba(12,11,15,1)');
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // 崖壁竖向岩纹（粗细不一，避免像一条黑带）
+  for (let i = 0; i < pts.length; i += 2) {
+    const p = pts[i];
+    const len = 60 + ((i * 37) % 110);
+    ctx.strokeStyle = 'rgba(0,0,0,' + (0.10 + ((i * 13) % 7) * 0.018) + ')';
+    ctx.lineWidth = 2 + ((i * 5) % 3);
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y + 6);
+    ctx.lineTo(p.x + ((i % 3) - 1) * 7, p.y + len);
+    ctx.stroke();
+  }
+  // 少量受光的岩棱
+  for (let i = 3; i < pts.length; i += 7) {
+    const p = pts[i];
+    ctx.strokeStyle = 'rgba(255,215,160,0.10)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y + 8);
+    ctx.lineTo(p.x + 4, p.y + 90);
+    ctx.stroke();
+  }
+
+  // 崖顶受光边 + 下方暗边
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (const p of pts) ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = 'rgba(255,242,196,0.55)';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y + 7);
+  for (const p of pts) ctx.lineTo(p.x, p.y + 7);
+  ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // 崖顶的草与碎石
+  for (let i = 0; i < pts.length; i += 2) {
+    if ((i * 7) % 5 > 1) continue;
+    const p = pts[i];
+    ctx.strokeStyle = 'rgba(16,24,16,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y - 1);
+    ctx.lineTo(p.x - 3, p.y - 10);
+    ctx.moveTo(p.x + 4, p.y - 1);
+    ctx.lineTo(p.x + 8, p.y - 8);
+    ctx.stroke();
+  }
+
+  // 谷底：远山剪影
+  ctx.beginPath();
+  ctx.moveTo(-320, edgeY + 470);
+  for (let x = -320; x <= WORLD.w + 320; x += 70) {
+    ctx.lineTo(x, edgeY + 268 + Math.sin(x * 0.004) * 26 + Math.sin(x * 0.0013) * 16);
+  }
+  ctx.lineTo(WORLD.w + 320, edgeY + 470);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(9,9,15,0.92)';
+  ctx.fill();
+
+  // 谷底雾带
+  for (let i = 0; i < 3; i++) {
+    const fy = edgeY + 150 + i * 46;
+    const fg2 = ctx.createLinearGradient(0, fy, 0, fy + 60);
+    fg2.addColorStop(0, 'rgba(120,140,170,0)');
+    fg2.addColorStop(0.5, 'rgba(120,140,170,' + (0.05 - i * 0.012) + ')');
+    fg2.addColorStop(1, 'rgba(120,140,170,0)');
+    ctx.fillStyle = fg2;
+    ctx.fillRect(-320, fy, WORLD.w + 640, 60);
+  }
+
+  // 底部压黑
+  const fog = ctx.createLinearGradient(0, edgeY + 180, 0, edgeY + 520);
+  fog.addColorStop(0, 'rgba(6,6,10,0)');
+  fog.addColorStop(1, 'rgba(4,4,8,0.95)');
+  ctx.fillStyle = fog;
+  ctx.fillRect(-320, edgeY + 180, WORLD.w + 640, 340);
+}
+
+function drawLedge(x, y, w, h) {
+  // 台阶投影
+  ctx.fillStyle = 'rgba(0,0,0,0.20)';
+  ctx.beginPath();
+  ctx.ellipse(x + 8, y + h * 0.7, w * 0.54, h * 0.52, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 立面
+  const fg = ctx.createLinearGradient(0, y, 0, y + h);
+  fg.addColorStop(0, 'rgba(96,78,58,0.95)');
+  fg.addColorStop(1, 'rgba(46,36,28,0.96)');
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2, y);
+  ctx.lineTo(x + w / 2, y + 5);
+  ctx.lineTo(x + w / 2 - 12, y + h);
+  ctx.lineTo(x - w / 2 + 16, y + h + 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // 顶缘受光
+  ctx.strokeStyle = 'rgba(255,232,180,0.38)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2, y);
+  ctx.lineTo(x + w / 2, y + 5);
+  ctx.stroke();
+
+  // 竖向岩纹
+  ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+  ctx.lineWidth = 1.6;
+  for (let i = 1; i < 6; i++) {
+    const tx = x - w / 2 + w * (i / 6);
+    ctx.beginPath();
+    ctx.moveTo(tx, y + 3);
+    ctx.lineTo(tx + 3, y + h * 0.92);
+    ctx.stroke();
+  }
+}
+
+function drawRift(cx, cy, w, t) {
+  const depth = 64;
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, cy);
+  for (let i = 1; i <= 12; i++) {
+    const px = cx - w / 2 + (w / 12) * i;
+    const py = cy + ((i % 2) ? 8 : -7) + Math.sin(i * 1.9) * 5;
+    ctx.lineTo(px, py);
+  }
+  ctx.lineTo(cx + w / 2 - 8, cy + depth);
+  ctx.lineTo(cx - w / 2 + 10, cy + depth + 8);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, cy - 10, 0, cy + depth);
+  g.addColorStop(0, 'rgba(5,4,10,0.95)');
+  g.addColorStop(0.7, 'rgba(24,12,40,0.85)');
+  g.addColorStop(1, 'rgba(60,26,90,0.55)');
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // 缝底紫光
+  const pulse = 0.6 + 0.4 * Math.sin(t * 1.3);
+  const rg = ctx.createRadialGradient(cx, cy + depth * 0.7, 4, cx, cy + depth * 0.7, w * 0.42);
+  rg.addColorStop(0, 'rgba(170,90,255,' + (0.16 * pulse) + ')');
+  rg.addColorStop(1, 'rgba(120,50,200,0)');
+  ctx.fillStyle = rg;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + depth * 0.7, w * 0.42, depth * 0.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 左缘受光
+  ctx.strokeStyle = 'rgba(210,210,245,0.30)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - w / 2, cy);
+  for (let i = 1; i <= 6; i++) {
+    const px = cx - w / 2 + (w / 12) * i;
+    ctx.lineTo(px, cy + ((i % 2) ? 8 : -7) + Math.sin(i * 1.9) * 5);
+  }
+  ctx.stroke();
+}
+
+// ---------- 高原积雪 ----------
+function drawSnow(t) {
+  for (const s of deco.snow) {
+    const g = ctx.createRadialGradient(s.x, s.y, 2, s.x, s.y, s.r);
+    g.addColorStop(0, 'rgba(248,251,255,' + s.a + ')');
+    g.addColorStop(0.55, 'rgba(228,238,255,' + (s.a * 0.66) + ')');
+    g.addColorStop(1, 'rgba(205,220,250,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, s.r, s.r * 0.26, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const tw = 0.5 + 0.5 * Math.sin(t * 1.2 + s.p);
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.05 + tw * 0.09) + ')';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y - 2, s.r * 0.45, s.r * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ---------- 雪山（远景）----------
+function drawPeaks() {
+  const peaks = [
+    { x: 1185, w: 430, h: 230 },
+    { x: 1510, w: 560, h: 310 },
+    { x: 1870, w: 470, h: 260 },
+    { x: 2120, w: 360, h: 190 }
+  ];
+  for (const p of peaks) {
+    const baseY = 690;
+    const topY = baseY - p.h;
+
+    ctx.beginPath();
+    ctx.moveTo(p.x - p.w / 2, baseY + 160);
+    ctx.lineTo(p.x - p.w * 0.20, topY + 26);
+    ctx.lineTo(p.x - p.w * 0.06, topY + 52);
+    ctx.lineTo(p.x + p.w * 0.08, topY);
+    ctx.lineTo(p.x + p.w * 0.22, topY + 56);
+    ctx.lineTo(p.x + p.w * 0.36, topY + 30);
+    ctx.lineTo(p.x + p.w / 2, baseY + 160);
+    ctx.closePath();
+
+    const pg = ctx.createLinearGradient(0, topY, 0, baseY + 60);
+    pg.addColorStop(0, 'rgba(104,102,122,0.95)');
+    pg.addColorStop(0.5, 'rgba(78,64,64,0.95)');
+    pg.addColorStop(1, 'rgba(52,38,32,0.96)');
+    ctx.fillStyle = pg;
+    ctx.fill();
+
+    // 雪冠（锯齿下缘）
+    const snowY = topY + p.h * 0.30;
+    ctx.beginPath();
+    ctx.moveTo(p.x - p.w * 0.20, snowY + 6);
+    ctx.lineTo(p.x - p.w * 0.06, topY + 40);
+    ctx.lineTo(p.x + p.w * 0.08, topY);
+    ctx.lineTo(p.x + p.w * 0.22, topY + 44);
+    ctx.lineTo(p.x + p.w * 0.32, snowY + 2);
+    for (let sx = p.x + p.w * 0.32; sx >= p.x - p.w * 0.20; sx -= 16) {
+      ctx.lineTo(sx, snowY + Math.sin(sx * 0.12) * 9 + 4);
+    }
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(236,244,255,0.92)';
+    ctx.fill();
+
+    // 雪面被夕阳照亮的一侧
+    ctx.strokeStyle = 'rgba(255,205,160,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(p.x - p.w * 0.20, snowY + 6);
+    ctx.lineTo(p.x - p.w * 0.06, topY + 40);
+    ctx.lineTo(p.x + p.w * 0.08, topY);
+    ctx.stroke();
+  }
+}
+
+// ---------- 航空基地 ----------
+function drawAirbase(cx, cy, t) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1.12, 1.12);
+
+  // 土坪 + 阴影：让基地"坐"进地里，而不是贴上去
+  ctx.fillStyle = 'rgba(28,20,14,0.30)';
+  ctx.beginPath();
+  ctx.ellipse(10, 34, 322, 80, -0.03, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(80,68,50,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(0, 18, 292, 64, -0.03, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.rotate(-0.05);
+
+  // 跑道
+  const rg = ctx.createLinearGradient(0, -24, 0, 44);
+  rg.addColorStop(0, 'rgba(102,108,116,0.88)');
+  rg.addColorStop(1, 'rgba(56,60,66,0.92)');
+  ctx.fillStyle = rg;
+  roundRect(ctx, -212, -24, 424, 66, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, -212, -24, 424, 66, 8);
+  ctx.stroke();
+
+  // 中线
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([22, 16]);
+  ctx.lineDashOffset = -t * 20;
+  ctx.beginPath(); ctx.moveTo(-196, 9); ctx.lineTo(196, 9); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 边灯
+  for (let i = 0; i < 10; i++) {
+    const lx = -190 + i * 42;
+    const on = (Math.floor(t * 2.4) + i) % 3 === 0;
+    ctx.fillStyle = on ? 'rgba(255,222,130,0.9)' : 'rgba(255,222,130,0.18)';
+    ctx.beginPath(); ctx.arc(lx, -27, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = on ? 'rgba(255,222,130,0.5)' : 'rgba(255,222,130,0.12)';
+    ctx.beginPath(); ctx.arc(lx, 40, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 机库（跑道后侧）
+  for (let i = 0; i < 2; i++) {
+    const hx = -126 + i * 92;
+    ctx.fillStyle = 'rgba(50,57,64,0.96)';
+    ctx.beginPath();
+    ctx.moveTo(hx - 34, -20);
+    ctx.quadraticCurveTo(hx, -76, hx + 34, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.beginPath();
+    ctx.moveTo(hx - 27, -20);
+    ctx.quadraticCurveTo(hx, -68, hx + 27, -20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(18,22,26,0.55)';
+    ctx.fillRect(hx - 12, -36, 24, 16);
+  }
+
+  // 塔台（跑道右端）
+  ctx.fillStyle = 'rgba(43,49,55,0.98)';
+  ctx.fillRect(150, -98, 20, 76);
+  ctx.fillStyle = 'rgba(59,67,75,0.98)';
+  roundRect(ctx, 138, -116, 44, 22, 4);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(150,220,255,0.6)';
+  ctx.fillRect(143, -112, 34, 12);
+  ctx.strokeStyle = 'rgba(43,49,55,0.98)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(160, -116); ctx.lineTo(160, -140); ctx.stroke();
+  const blink = Math.sin(t * 4) > 0;
+  ctx.fillStyle = blink ? '#ff6b6b' : 'rgba(255,107,107,0.25)';
+  ctx.beginPath(); ctx.arc(160, -142, 3, 0, Math.PI * 2); ctx.fill();
+
+  // 跑道上的运输机剪影（俯视）
+  ctx.save();
+  ctx.translate(-46, 9);
+  ctx.fillStyle = 'rgba(18,22,26,0.9)';
+  ctx.beginPath(); ctx.ellipse(0, 0, 44, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-4, -1); ctx.lineTo(-26, -22); ctx.lineTo(-8, -22); ctx.lineTo(14, -1);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-4, 1); ctx.lineTo(-26, 22); ctx.lineTo(-8, 22); ctx.lineTo(14, 1);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-34, 0); ctx.lineTo(-50, -12); ctx.lineTo(-40, -12); ctx.lineTo(-26, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawTemple(x, y, t) {
+  ctx.save();
+  // 台基
+  ctx.fillStyle = '#15101f';
+  ctx.beginPath();
+  ctx.moveTo(x - 190, y + 60);
+  ctx.lineTo(x - 130, y - 60);
+  ctx.lineTo(x + 130, y - 60);
+  ctx.lineTo(x + 190, y + 60);
+  ctx.closePath();
+  ctx.fill();
+
+  // 上层
+  ctx.fillStyle = '#1d1629';
+  ctx.beginPath();
+  ctx.moveTo(x - 120, y - 60);
+  ctx.lineTo(x - 78, y - 150);
+  ctx.lineTo(x + 78, y - 150);
+  ctx.lineTo(x + 120, y - 60);
+  ctx.closePath();
+  ctx.fill();
+
+  // 边框
+  ctx.strokeStyle = 'rgba(190,140,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 窗（紫光呼吸）
+  const pulse = 0.5 + 0.5 * Math.sin(t * 1.6);
+  for (let i = 0; i < 3; i++) {
+    const wx = x - 62 + i * 62;
+    const wy = y - 6;
+    const gg = ctx.createRadialGradient(wx, wy, 2, wx, wy, 34);
+    gg.addColorStop(0, 'rgba(190,120,255,' + (0.55 + pulse * 0.35) + ')');
+    gg.addColorStop(1, 'rgba(120,60,200,0)');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(wx, wy, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(225,190,255,' + (0.7 + pulse * 0.3) + ')';
+    roundRect(ctx, wx - 7, wy - 16, 14, 32, 5);
+    ctx.fill();
+  }
+
+  // 顶部尖饰
+  ctx.fillStyle = 'rgba(200,160,255,0.75)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 192);
+  ctx.lineTo(x - 12, y - 150);
+  ctx.lineTo(x + 12, y - 150);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// ---------- 区域标题 ----------
+function drawRegionLabels() {
+  setLayer(1);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const r of REGIONS) {
+    const unlocked = regionUnlocked(r);
+    ctx.globalAlpha = unlocked ? 0.13 : 0.055;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 112px ' + FONT_CN;
+    ctx.fillText(r.name, r.labelX, r.labelY);
+
+    ctx.globalAlpha = unlocked ? 0.34 : 0.14;
+    ctx.fillStyle = r.accent;
+    ctx.font = '18px ' + FONT_UI;
+    ctx.fillText(r.sub, r.labelX, r.labelY + 74);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 路线 ----------
+function drawRoute(t) {
+  setLayer(1);
+  if (routePts.length < 2) return;
+
+  // 底
+  ctx.beginPath();
+  ctx.moveTo(routePts[0].x, routePts[0].y);
+  for (let i = 1; i < routePts.length; i++) ctx.lineTo(routePts[i].x, routePts[i].y);
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.lineWidth = 18;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // 已走过的路（金色）
+  const litEnd = Math.min(routePts.length - 1, Math.max(0, (state.cleared - 1) * ROUTE_STEPS));
+  if (state.cleared > 0 && litEnd > 0) {
+    ctx.beginPath();
+    ctx.moveTo(routePts[0].x, routePts[0].y);
+    for (let i = 1; i <= litEnd; i++) ctx.lineTo(routePts[i].x, routePts[i].y);
+    ctx.strokeStyle = 'rgba(255,206,90,0.55)';
+    ctx.lineWidth = 7;
+    ctx.shadowColor = 'rgba(255,190,60,0.8)';
+    ctx.shadowBlur = 14;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(255,240,180,0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 下一段（虚线流动）
+  if (state.cleared < LEVELS.length) {
+    const from = Math.max(0, (state.cleared - 1) * ROUTE_STEPS);
+    const to = Math.min(routePts.length - 1, state.cleared * ROUTE_STEPS);
+    if (to > from) {
+      ctx.beginPath();
+      ctx.moveTo(routePts[from].x, routePts[from].y);
+      for (let i = from + 1; i <= to; i++) ctx.lineTo(routePts[i].x, routePts[i].y);
+      ctx.setLineDash([12, 12]);
+      ctx.lineDashOffset = -t * 30;
+      ctx.strokeStyle = 'rgba(255,212,59,0.75)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+// ---------- 旗帜 ----------
+function drawFlags(t) {
+  setLayer(1);
+  for (const lv of LEVELS) {
+    const st = levelState(lv.id);
+    const hover = (hoverId === lv.id);
+    drawFlag(lv, st, t, hover);
+  }
+}
+
+function drawFlag(lv, st, t, hover) {
+  const isBoss = !!lv.boss;
+  let s = (isBoss ? 1.24 : 1);
+  if (hover) s *= 1.08;
+
+  const available = (st === 'next');
+  const locked = (st === 'locked');
+  const done = (st === 'done');
+
+  const bob = available ? Math.sin(t * 2.2) * 3.5 : 0;
+  const bx = lv.x;
+  const by = lv.y + bob;
+
+  // 阴影
+  ctx.globalAlpha = locked ? 0.30 : 0.5;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(bx, by + 6, 24 * s, 8 * s, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // 可挑战光环
+  if (available) {
+    const pulse = (Math.sin(t * 2.6) + 1) / 2;
+    ctx.save();
+    ctx.globalAlpha = 0.18 + pulse * 0.20;
+    ctx.fillStyle = '#ffd43b';
+    ctx.beginPath();
+    ctx.ellipse(bx, by + 6, (30 + pulse * 16) * s, (10 + pulse * 6) * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.45 + pulse * 0.35;
+    ctx.strokeStyle = '#ffe08a';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(bx, by + 6, (34 + pulse * 20) * s, (12 + pulse * 7) * s, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  const alpha = locked ? 0.55 : 1;
+  ctx.globalAlpha = alpha;
+
+  const topY = by - 92 * s;
+
+  // 旗杆
+  const pg = ctx.createLinearGradient(bx, by, bx, topY);
+  if (locked) { pg.addColorStop(0, '#4a4f55'); pg.addColorStop(1, '#7d848b'); }
+  else { pg.addColorStop(0, '#8a6a3a'); pg.addColorStop(1, '#e8cf94'); }
+  ctx.strokeStyle = pg;
+  ctx.lineWidth = 4.2 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx, topY);
+  ctx.stroke();
+
+  // 杆顶球
+  ctx.fillStyle = locked ? '#6f757c' : (isBoss ? '#ff8a8a' : '#ffd43b');
+  ctx.beginPath(); ctx.arc(bx, topY - 3 * s, 4.4 * s, 0, Math.PI * 2); ctx.fill();
+
+  // 旗面
+  const fw = (isBoss ? 66 : 58) * s;
+  const fh = 36 * s;
+  const wave = Math.sin(t * 3 + lv.id * 1.7) * 3 * s;
+  const top = topY + 6 * s;
+
+  let c1, c2, edge;
+  if (done) { c1 = '#f3c33f'; c2 = '#c98a1e'; edge = 'rgba(255,235,170,.9)'; }
+  else if (available) { c1 = '#6fe08a'; c2 = '#2f9e52'; edge = 'rgba(190,255,205,.95)'; }
+  else { c1 = '#5d646c'; c2 = '#3d434a'; edge = 'rgba(150,160,170,.5)'; }
+
+  ctx.beginPath();
+  ctx.moveTo(bx, top);
+  ctx.bezierCurveTo(bx + fw * 0.35, top - 2 * s + wave, bx + fw * 0.7, top + 4 * s + wave, bx + fw, top + wave);
+  ctx.lineTo(bx + fw * 0.84, top + fh * 0.55 + wave * 0.6);
+  ctx.lineTo(bx + fw, top + fh + wave);
+  ctx.bezierCurveTo(bx + fw * 0.7, top + fh + 3 * s + wave, bx + fw * 0.35, top + fh - 2 * s + wave, bx, top + fh);
+  ctx.closePath();
+
+  const fg = ctx.createLinearGradient(bx, top, bx, top + fh);
+  fg.addColorStop(0, c1);
+  fg.addColorStop(1, c2);
+  ctx.fillStyle = fg;
+  ctx.fill();
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  // 旗面编号
+  ctx.fillStyle = done ? 'rgba(60,38,0,.92)' : (available ? 'rgba(8,48,20,.92)' : 'rgba(225,230,235,.75)');
+  ctx.font = 'bold ' + (20 * s) + 'px ' + FONT_UI;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(lv.id), bx + fw * 0.40, top + fh * 0.55 + wave * 0.4);
+
+  // 顶部徽章
+  const badgeY = topY - 20 * s;
+  ctx.beginPath();
+  ctx.arc(bx, badgeY, 13.5 * s, 0, Math.PI * 2);
+  ctx.fillStyle = locked ? 'rgba(30,34,40,.9)' : 'rgba(10,26,18,.92)';
+  ctx.fill();
+  ctx.strokeStyle = done ? 'rgba(255,212,59,.75)' : (available ? 'rgba(120,240,150,.75)' : 'rgba(130,140,150,.5)');
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.font = (15 * s) + 'px serif';
+  ctx.fillText(locked ? '🔒' : lv.emoji, bx, badgeY + 1);
+
+  // 星级
+  if (done) {
+    const got = state.stars[lv.id] || 0;
+    ctx.font = 'bold ' + (13 * s) + 'px ' + FONT_UI;
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i < got ? '#ffd43b' : 'rgba(255,255,255,0.16)';
+      ctx.fillText('★', bx - 16 * s + i * 16 * s, by + 26 * s);
+    }
+  }
+
+  // 名称
+  if (cam.scale >= 0.52) {
+    ctx.font = (lv.boss ? 'bold ' : '') + (13 * s) + 'px ' + FONT_UI;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = locked ? 'rgba(170,180,190,.45)' : (done ? 'rgba(255,240,200,.95)' : 'rgba(220,255,225,.95)');
+    ctx.strokeStyle = 'rgba(0,0,0,.75)';
+    ctx.lineWidth = 3;
+    const nameY = by + (done ? 46 : 26) * s;
+    ctx.strokeText(lv.name, bx, nameY);
+    ctx.fillText(lv.name, bx, nameY);
+  }
+
+  // BOSS 标记
+  if (isBoss && !locked) {
+    const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+    ctx.globalAlpha = alpha * pulse;
+    ctx.font = 'bold 11px ' + FONT_UI;
+    ctx.fillStyle = '#ff8a8a';
+    ctx.fillText('BOSS', bx, by + (done ? 62 : 42) * s);
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 迷雾 ----------
+function drawFog(t) {
+  setLayer(1);
+  for (const r of REGIONS) {
+    if (regionUnlocked(r)) continue;
+    const x0 = r.x0 - 280, x1 = r.x1;
+    const g = ctx.createLinearGradient(x0, 0, x1, 0);
+    g.addColorStop(0, 'rgba(4,8,12,0)');
+    g.addColorStop(0.12, 'rgba(4,8,12,0.34)');
+    g.addColorStop(0.90, 'rgba(4,8,12,0.34)');
+    g.addColorStop(1, 'rgba(4,8,12,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, -200, x1 - x0, WORLD.h + 400);
+
+    // 几团缓慢飘动的雾
+    for (let i = 0; i < 4; i++) {
+      const px = x0 + ((x0 * 0.3 + i * 260 + t * 8) % (x1 - x0));
+      const py = 640 + i * 130;
+      const rg = ctx.createRadialGradient(px, py, 10, px, py, 260);
+      rg.addColorStop(0, 'rgba(140,120,180,0.055)');
+      rg.addColorStop(1, 'rgba(140,120,180,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.arc(px, py, 260, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // 全部通关后不再有雾
+  if (state.cleared >= LEVELS.length) return;
+}
+
+// ---------- 屏幕层 ----------
+function drawVignette() {
+  setScreen();
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.34, W / 2, H / 2, Math.max(W, H) * 0.78);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.65, 'rgba(0,0,0,0.10)');
+  g.addColorStop(1, 'rgba(0,0,0,0.46)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // 上下暗边
+  const gt = ctx.createLinearGradient(0, 0, 0, 120);
+  gt.addColorStop(0, 'rgba(0,0,0,0.42)');
+  gt.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gt;
+  ctx.fillRect(0, 0, W, 120);
+
+  const gb = ctx.createLinearGradient(0, H - 130, 0, H);
+  gb.addColorStop(0, 'rgba(0,0,0,0)');
+  gb.addColorStop(1, 'rgba(0,0,0,0.42)');
+  ctx.fillStyle = gb;
+  ctx.fillRect(0, H - 130, W, 130);
+}
+
+// ==================================================================
+//  主循环
+// ==================================================================
+let lastT = 0;
+
+function frame(ts) {
+  const t = ts / 1000;
+  const dt = Math.min(0.05, lastT ? t - lastT : 0.016);
+  lastT = t;
+
+  // 关卡开着的时候不画地图，省点性能
+  if (frameOpen) { requestAnimationFrame(frame); return; }
+
+  // 开场镜头
+  if (!intro.done && intro.from && intro.to) {
+    intro.t += dt / intro.dur;
+    if (intro.t >= 1) { intro.t = 1; intro.done = true; }
+    const e = easeOutCubic(intro.t);
+    cam.scale = lerp(intro.from.scale, intro.to.scale, e);
+    cam.x = lerp(intro.from.x, intro.to.x, e);
+    cam.y = lerp(intro.from.y, intro.to.y, e);
+  }
+
+  // 相机动画
+  if (camAnim) {
+    camAnim.t += dt * 1000 / camAnim.dur;
+    if (camAnim.t >= 1) {
+      camAnim.t = 1;
+      cam.x = camAnim.to.x; cam.y = camAnim.to.y; cam.scale = camAnim.to.scale;
+      camAnim = null;
+    } else {
+      const e = easeOutCubic(camAnim.t);
+      cam.x = lerp(camAnim.from.x, camAnim.to.x, e);
+      cam.y = lerp(camAnim.from.y, camAnim.to.y, e);
+      cam.scale = lerp(camAnim.from.scale, camAnim.to.scale, e);
+    }
+  }
+
+  setScreen();
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#05070d';
+  ctx.fillRect(0, 0, W, H);
+
+  drawSky(t);
+  drawFar(t);
+  drawGround(t);
+  drawDeco(t);
+  drawRegionLabels();
+  drawRoute(t);
+  drawFlags(t);
+  drawFog(t);
+  drawVignette();
+
+  requestAnimationFrame(frame);
+}
+
+// ==================================================================
+//  启动
+// ==================================================================
+loadSave();
+detectLevelDir();
+const subEl = document.querySelector('#hud .subtitle');
+if (subEl) subEl.textContent = '战 役 地 图 · 三 幕 十 三 关 · ' + MAP_VER;
+resize();
+updateHud();
+
+// 从关卡返回时不要重放开场镜头
+if (location.search.indexOf('back=1') >= 0) {
+  intro.done = true;
+  const f = fitCam();
+  cam.scale = f.scale;
+  cam.x = f.x;
+  cam.y = f.y;
+  clampCam();
+}
+
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
